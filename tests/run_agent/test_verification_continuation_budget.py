@@ -105,6 +105,41 @@ def test_pre_verify_preserves_composed_report_at_budget_limit(agent, monkeypatch
     assert not result["messages"][1].get("_pre_verify_synthetic")
 
 
+def test_pre_verify_gates_no_edit_turn(agent, monkeypatch):
+    """A registered `pre_verify` hook fires even when the turn edited nothing.
+
+    Pure-hallucination "done / tests pass / it works" claims are made with no
+    file mutations, so gating the hook on `_turn_file_mutation_paths` lets
+    those unverified claims escape the user's verification gate. The hook must
+    run on a no-edit turn too; it self-scopes on `changed_paths`/`coding` and
+    returns empty when there is no success language, so a chat-only turn costs
+    nothing extra.
+    """
+    agent._turn_file_mutation_paths = set()  # no edits this turn
+    agent._interruptible_api_call = lambda _kwargs: _response("ship it")
+    agent._handle_max_iterations = MagicMock(return_value="replacement summary")
+    monkeypatch.setenv("HERMES_VERIFY_ON_STOP", "0")
+
+    with (
+        patch("hermes_cli.plugins.has_hook", side_effect=lambda name: name == "pre_verify"),
+        patch(
+            "hermes_cli.plugins.get_pre_verify_continue_message",
+            return_value="that claim is unverified - run the tests",
+        ),
+        patch("agent.verify_hooks.max_verify_nudges", return_value=2),
+        patch("hermes_cli.plugins.invoke_hook", return_value=[]),
+    ):
+        result = agent.run_conversation("report status")
+
+    # The pre_verify hook ran on a no-edit turn and held the candidate back.
+    assert result["final_response"] == "ship it"
+    assert result["turn_exit_reason"] == "max_iterations_reached(1/1)"
+    assert result["completed"] is False
+    # The nudge was injected as a synthetic user turn (pre_verify path), so the
+    # candidate is pending rather than delivered as final.
+    assert not result["messages"][1].get("_pre_verify_synthetic")
+
+
 def test_intermediate_ack_uses_summary_instead_of_premature_text(agent, monkeypatch):
     agent.valid_tool_names = ["web_search"]
     agent._intent_ack_continuation = True

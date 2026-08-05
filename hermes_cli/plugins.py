@@ -2329,9 +2329,9 @@ def get_pre_verify_continue_message(
 ) -> Optional[str]:
     """Check user ``pre_verify`` hooks for a directive to keep the agent going.
 
-    Fired once per turn when the agent edited code and is about to verify/finish.
-    A hook keeps the turn going (run a check, defer it, tidy the diff) by
-    returning::
+    Fired once per turn whenever a ``pre_verify`` hook is registered, when the
+    agent is about to finish. A hook keeps the turn going (run a check, defer
+    it, clean up the diff) by returning::
 
         {"action": "continue", "message": "<follow-up for the model>"}
 

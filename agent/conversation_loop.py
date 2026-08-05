@@ -7095,11 +7095,17 @@ def run_conversation(
                     final_response = None
                     continue
 
-                # User verification-loop gate: when the agent edited code this
-                # turn, let a registered `pre_verify` hook (plugin/shell) keep it
-                # going one more turn. The shipped guidance is folded into the
-                # evidence-based verify-on-stop nudge above, so this path has no
-                # default continuation cost.
+                # User verification-loop gate: when a `pre_verify` hook
+                # (plugin/shell) is registered, let it keep the agent going one
+                # more turn before finalizing. Fire it whether or not this turn
+                # edited files — a false "done / tests pass / it works" claim
+                # made with no file mutations is as much a verification lie as
+                # one made after an edit, and the hook is the user-supplied
+                # gate for both. Hooks self-scope on `changed_paths`/`coding`
+                # and return empty when there is no success language to contest,
+                # so a no-edit turn costs nothing extra. The shipped guidance is
+                # folded into the evidence-based verify-on-stop nudge above, so
+                # this path has no default continuation cost.
                 _verify_nudge2 = None
                 _edited = sorted(getattr(agent, "_turn_file_mutation_paths", set()) or [])
                 _attempt = getattr(agent, "_pre_verify_nudges", 0)
@@ -7108,7 +7114,7 @@ def run_conversation(
                     from hermes_cli.lifecycle import has_hook
                     from hermes_cli.plugins import get_pre_verify_continue_message
 
-                    if _edited and has_hook("pre_verify") and _attempt < max_verify_nudges():
+                    if has_hook("pre_verify") and _attempt < max_verify_nudges():
                         # Posture is fixed for the session — resolve once + cache.
                         coding = getattr(agent, "_resolved_is_coding", None)
                         if coding is None:
